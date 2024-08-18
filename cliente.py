@@ -1,39 +1,38 @@
 import socket
 import time
-import pickle  # Para persistência de dados
 
 class ChatClient:
-    def init(self, host='localhost', port=12345):
-        self.client = socket.socket(socket.AFINET, socket.SOCKSTREAM)
-        self.client.connect((host, port))
-        self.clientid = None
-        self.contacts = {}
-        self.groups = {}
-        self.messagehistory = []
-
-    def register_client(self):
+    def __init__(self, host='localhost', port=12345):
+        self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.client_socket.connect((host, port))
+        self.client_id = None
+    
+    def register(self):
         message = "01"  # Código para registrar cliente
-        self.client.send(message.encode('utf-8'))
-        response = self.client.recv(1024).decode('utf-8')
-        self.client_id = response[2:]
-        print(f"Cliente registrado com ID: {self.client_id}")
-
+        self.client_socket.sendall(message.encode('utf-8'))
+        response = self.client_socket.recv(1024).decode('utf-8')
+        if response.startswith("02"):
+            self.client_id = response[2:15]
+            print(f"Registrado com ID: {self.client_id}")
+    
+    def connect(self):
+        if self.client_id:
+            message = f"03{self.client_id}"
+            self.client_socket.sendall(message.encode('utf-8'))
+    
     def send_message(self, dst, data):
-        timestamp = int(time.time())
-        message = f"05{self.client_id}{dst}{timestamp}{data}"
-        self.client.send(message.encode('utf-8'))
-
-    def receive_message(self):
-        while True:
-            message = self.client.recv(1024).decode('utf-8')
-            # Processar a mensagem recebida
-            print(f"Mensagem recebida: {message}")
-
+        if self.client_id:
+            timestamp = str(int(time.time())).zfill(10)
+            message = f"05{self.client_id}{dst}{timestamp}{data.ljust(218)}"
+            self.client_socket.sendall(message.encode('utf-8'))
+    
     def run(self):
-        # Registrar ou conectar o cliente, enviar mensagens, etc.
-        pass
+        self.register()
+        self.connect()
+        while True:
+            data = input("Mensagem: ")
+            self.send_message("DESTINATARIO_ID", data)  # Substituir por um ID de destinatário válido
 
-if __name == "__main":
+if __name__ == "__main__":
     client = ChatClient()
-    client.register_client()
     client.run()
