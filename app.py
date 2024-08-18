@@ -25,6 +25,7 @@ def send_message_to_server(message):
 def register_client():
     global client_id
     client_id = str(int(time.time() * 1000)).zfill(13)  # Gerar um ID único
+    print(client_id)
     return jsonify({'client_id': client_id})
 
 @app.route('/')
