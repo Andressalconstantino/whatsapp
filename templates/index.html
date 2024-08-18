@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat</title>
+    <script>
+        let client_id = '';
+
+        function registerClient() {
+            fetch('/register', {
+                method: 'POST'
+            })
+            .then(response => response.json())
+            .then(data => {
+                client_id = data.client_id;
+                console.log('Client ID registrado:', client_id);
+            });
+        }
+
+        function sendMessage() {
+            const recipient = document.getElementById('recipient').value;
+            const message = document.getElementById('message').value;
+
+            fetch('/send', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ recipient, message })
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log('Mensagem enviada:', data);
+            });
+        }
+
+        window.onload = registerClient;
+    </script>
+</head>
+<body>
+    <h1>Chat</h1>
+    <div>
+        <label for="recipient">Destinatário:</label>
+        <input type="text" id="recipient">
+    </div>
+    <div>
+        <label for="message">Mensagem:</label>
+        <input type="text" id="message">
+    </div>
+    <button onclick="sendMessage()">Enviar</button>
+</body>
+</html>
