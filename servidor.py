@@ -35,11 +35,13 @@ class ChatServer:
             self.clients[client_id] = (connection, None)
             response = f"02{client_id}"
             connection.sendall(response.encode('utf-8'))
+
         elif code == "03":  # Conectar cliente
             client_id = message[2:15]
             if client_id in self.clients:
                 self.clients[client_id] = (connection, None)
                 self.deliver_pending_messages(client_id)
+
         elif code == "05":  # Enviar mensagem
             src = message[2:15]
             dst = message[15:28]
@@ -56,6 +58,37 @@ class ChatServer:
                 if dst not in self.pending_messages:
                     self.pending_messages[dst] = []
                 self.pending_messages[dst].append(message)
+
+        elif code == "08":  # Confirmação de leitura
+            src = message[2:15]
+            timestamp = message[15:25]
+            if src in self.clients:
+                # Notificar o originador da mensagem sobre a leitura
+                for client_id, (conn, _) in self.clients.items():
+                    if client_id == src:
+                        continue
+                    # Verificar se há mensagens pendentes para este cliente
+                    for pending_message in self.pending_messages.get(client_id, []):
+                        if pending_message.startswith(f"05{src}"):
+                            confirmation = f"09{src}{timestamp}"
+                            conn.sendall(confirmation.encode('utf-8'))
+                        
+        elif code == "10":  # Criar grupo
+            creator = message[2:15]
+            timestamp = message[15:25]
+            members = [message[i:i+13] for i in range(25, len(message), 13)]
+            group_id = self.generate_group_id()  # Função para gerar ID de grupo
+            self.groups[group_id] = members + [creator]
+
+            # Notificar membros do grupo
+            group_notification = f"11{group_id}{timestamp}{''.join(self.groups[group_id])}"
+            for member in self.groups[group_id]:
+                if member in self.clients:
+                    self.clients[member][0].sendall(group_notification.encode('utf-8'))
+
+
+
+
 
     
     def deliver_pending_messages(self, client_id):

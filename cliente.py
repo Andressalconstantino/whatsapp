@@ -27,13 +27,27 @@ class ChatClient:
                     src = message[2:15]
                     data = message[38:].strip()
                     print(f"Mensagem de {src}: {data}")
+                    # Enviar confirmação de leitura
+                    self.send_read_confirmation(src, message[28:38])
                 elif code == "07":  # Confirmação de entrega
                     dst = message[2:15]
                     timestamp = message[15:25]
                     print(f"Mensagens entregues para {dst} até {timestamp}.")
+                elif code == "09":  # Confirmação de leitura
+                    dst = message[2:15]
+                    timestamp = message[15:25]
+                    print(f"Mensagens de {dst} lidas até {timestamp}.")
             except ConnectionResetError:
                 print("Conexão perdida com o servidor.")
                 break
+
+
+    
+    def send_read_confirmation(self, src, timestamp):
+        if self.client_id:
+            message = f"08{src}{timestamp}"
+            self.client_socket.sendall(message.encode('utf-8'))
+
     
     def connect(self):
         if self.client_id:
@@ -45,6 +59,14 @@ class ChatClient:
             timestamp = str(int(time.time())).zfill(10)
             message = f"05{self.client_id}{dst}{timestamp}{data.ljust(218)}"
             self.client_socket.sendall(message.encode('utf-8'))
+
+    def create_group(self, members):
+        if self.client_id:
+            timestamp = str(int(time.time()))
+            members_str = ''.join(members)  # Formatar IDs dos membros
+            message = f"10{self.client_id}{timestamp}{members_str}"
+            self.client_socket.sendall(message.encode('utf-8'))
+
     
     def run(self):
         self.register()
