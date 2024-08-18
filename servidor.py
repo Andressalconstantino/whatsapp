@@ -40,6 +40,23 @@ class ChatServer:
             if client_id in self.clients:
                 self.clients[client_id] = (connection, None)
                 self.deliver_pending_messages(client_id)
+        elif code == "05":  # Enviar mensagem
+            src = message[2:15]
+            dst = message[15:28]
+            timestamp = message[28:38]
+            data = message[38:].strip()
+
+            if dst in self.clients and self.clients[dst][0]:  # Destinatário conectado
+                self.clients[dst][0].sendall(message.encode('utf-8'))
+                # Confirmar entrega ao originador
+                confirmation = f"07{dst}{timestamp}"
+                self.clients[src][0].sendall(confirmation.encode('utf-8'))
+            else:
+                # Armazenar mensagem se o destinatário estiver offline
+                if dst not in self.pending_messages:
+                    self.pending_messages[dst] = []
+                self.pending_messages[dst].append(message)
+
     
     def deliver_pending_messages(self, client_id):
         if client_id in self.pending_messages:
