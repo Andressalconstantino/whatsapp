@@ -5,23 +5,14 @@
     <link rel="stylesheet" href="style.css">
     <title>Whatsapp</title>
 </head>
-
 <body>
-    <div class="chatOptions">
-        <button class="userOption">
-            name
-        </button>
-        <button class="userOption">
-            name
-        </button>
-        <button class="userOption">
-            name
-        </button>
+    <div class="chatOptions" id="chatOptions">
+        <!-- Lista de usuários será adicionada aqui dinamicamente -->
     </div>
     <div class="chatInterface">
         <div class="modal" id="usernameModal">
             <div class="conteudoModal">
-                <h1>Bem vindo ao Whatsapp!</h1>
+                <h1>Bem-vindo ao Whatsapp!</h1>
                 <h2>Digite seu nome de usuário</h2>
                 <input type="text" id="nameInput" placeholder="Nome" required>
                 <button id="setUsernameButton">Salvar</button>
@@ -29,10 +20,10 @@
         </div>
         
         <div class="chatBox">
-            <h2>Username</h2>
+            <h2 id="chatUsername">Username</h2>
             <div class="areaMensagem" id="areaMensagem"></div>
             <div class="inputCaixa">
-                <input type="text" id="msgInput" placeholder="digite sua mensagem aqui" required>
+                <input type="text" id="msgInput" placeholder="Digite sua mensagem aqui" required>
                 <button id="sendButton">Enviar</button>
             </div>
         </div>
@@ -42,10 +33,50 @@
         <span>Illustration by <a href="https://icons8.com/illustrations/author/zD2oqC8lLBBA">Icons 8</a> from <a href="https://icons8.com/illustrations">Ouch!</a></span>
     </div>
     <script>
-        window.onload = function() {
-            document.getElementById('usernameModal').style.display = 'flex';
+        let socket;
+        let username = '';
+        let selectedUserId = '';
+
+        function connectWebSocket() {
+            socket = new WebSocket('ws://localhost:8765');
+
+            socket.onopen = function () {
+                console.log('Conectado ao servidor WebSocket');
+            };
+
+            socket.onmessage = function (event) {
+                const message = JSON.parse(event.data);
+
+                if (message.type === 'user_list') {
+                    updateUserList(message.users);
+                } else if (message.type === 'chat') {
+                    const areaMensagem = document.getElementById('areaMensagem');
+                    areaMensagem.innerHTML += `<div><strong>${message.sender}:</strong> ${message.text}</div>`;
+                }
+            };
+
+            socket.onclose = function () {
+                console.log('Desconectado do servidor WebSocket');
+            };
         }
-        document.getElementById('setUsernameButton').addEventListener('click', function() { //recebe o nome de usuario
+
+        function updateUserList(users) {
+            const chatOptions = document.getElementById('chatOptions');
+            chatOptions.innerHTML = '';  // Clear existing users
+
+            users.forEach(userId => {
+                const button = document.createElement('button');
+                button.className = 'userOption';
+                button.innerText = userId;
+                button.addEventListener('click', function () {
+                    selectedUserId = userId;
+                    document.getElementById('chatUsername').innerText = selectedUserId;
+                });
+                chatOptions.appendChild(button);
+            });
+        }
+
+        document.getElementById('setUsernameButton').addEventListener('click', function () {
             const nameInput = document.getElementById('nameInput');
             username = nameInput.value.trim();
             if (username) {
@@ -53,6 +84,24 @@
                 connectWebSocket();
             }
         });
+
+        document.getElementById('sendButton').addEventListener('click', function () {
+            if (selectedUserId && username) {
+                const msgInput = document.getElementById('msgInput');
+                const message = {
+                    type: 'chat',
+                    sender: username,
+                    recipient: selectedUserId,
+                    text: msgInput.value.trim()
+                };
+                socket.send(JSON.stringify(message));
+                msgInput.value = '';
+            }
+        });
+
+        window.onload = function() {
+            document.getElementById('usernameModal').style.display = 'flex';
+        }
     </script>
 </body>
 </html>
