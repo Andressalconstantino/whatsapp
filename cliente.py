@@ -25,8 +25,9 @@ class ChatClient:
                 code = message[:2]
                 if code == "05":  # Recebendo uma mensagem
                     src = message[2:15]
+                    group_or_dst = message[15:28]
                     data = message[38:].strip()
-                    print(f"Mensagem de {src}: {data}")
+                    print(f"Mensagem de {src} para {group_or_dst}: {data}")
                     # Enviar confirmação de leitura
                     self.send_read_confirmation(src, message[28:38])
                 elif code == "07":  # Confirmação de entrega
@@ -40,6 +41,7 @@ class ChatClient:
             except ConnectionResetError:
                 print("Conexão perdida com o servidor.")
                 break
+
 
 
     
@@ -72,10 +74,25 @@ class ChatClient:
         self.register()
         self.connect()
         threading.Thread(target=self.listen_for_messages).start()
+        
         while True:
-            data = input("Mensagem: ")
-            recipient_id = input("ID do destinatário: ")
-            self.send_message(recipient_id, data)  # Substituir por um ID de destinatário válido
+            action = input("Digite '1' para enviar uma mensagem, '2' para criar um grupo, ou '3' para enviar mensagem para um grupo: ")
+            if action == '1':
+                data = input("Mensagem: ")
+                recipient_id = input("ID do destinatário: ")
+                self.send_message(recipient_id, data)
+            elif action == '2':
+                members = []
+                while True:
+                    member_id = input("ID do membro (ou deixe em branco para finalizar): ")
+                    if not member_id:
+                        break
+                    members.append(member_id)
+                self.create_group(members)
+            elif action == '3':
+                group_id = input("ID do grupo: ")
+                data = input("Mensagem para o grupo: ")
+                self.send_message(group_id, data)
 
 if __name__ == "__main__":
     client = ChatClient()

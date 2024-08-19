@@ -11,6 +11,13 @@ class ChatServer:
         
         self.clients = {}  # Armazenar clientes {client_id: (connection, address)}
         self.pending_messages = {}  # Mensagens pendentes {client_id: [(message_data)]}
+        self.groups = {}  # Armazenar grupos {group_id: [client_id1, client_id2, ...]}
+    
+    def generate_client_id(self):
+        return str(int(time.time() * 1000)).zfill(13)  # Gerar um ID único com 13 dígitos
+    
+    def generate_group_id(self):
+        return f"G{int(time.time() * 1000)}"  # Gerar um ID único para o grupo
     
     def generate_client_id(self):
         return str(int(time.time() * 1000)).zfill(13)  # Gerar um ID único com 13 dígitos
@@ -48,7 +55,9 @@ class ChatServer:
             timestamp = message[28:38]
             data = message[38:].strip()
 
-            if dst in self.clients and self.clients[dst][0]:  # Destinatário conectado
+            if dst.startswith("G"):  # Verificar se o destinatário é um grupo
+                self.send_message_to_group(src, dst, timestamp, data)
+            elif dst in self.clients and self.clients[dst][0]:  # Destinatário é um cliente conectado
                 self.clients[dst][0].sendall(message.encode('utf-8'))
                 # Confirmar entrega ao originador
                 confirmation = f"07{dst}{timestamp}"
@@ -72,12 +81,12 @@ class ChatServer:
                         if pending_message.startswith(f"05{src}"):
                             confirmation = f"09{src}{timestamp}"
                             conn.sendall(confirmation.encode('utf-8'))
-                        
+
         elif code == "10":  # Criar grupo
             creator = message[2:15]
             timestamp = message[15:25]
             members = [message[i:i+13] for i in range(25, len(message), 13)]
-            group_id = self.generate_group_id()  # Função para gerar ID de grupo
+            group_id = self.generate_group_id()
             self.groups[group_id] = members + [creator]
 
             # Notificar membros do grupo
@@ -85,6 +94,23 @@ class ChatServer:
             for member in self.groups[group_id]:
                 if member in self.clients:
                     self.clients[member][0].sendall(group_notification.encode('utf-8'))
+
+    def send_message_to_group(self, src, group_id, timestamp, data):
+        if group_id in self.groups:
+            for member in self.groups[group_id]:
+                try:
+                    if member in self.clients and self.clients[member][0]:  # Membro conectado
+                        message = f"05{src}{group_id}{timestamp}{data.ljust(218)}"
+                        self.clients[member][0].sendall(message.encode('utf-8'))
+                        print(f"Mensagem enviada para {member} no grupo {group_id}.")
+                    else:
+                        # Armazenar mensagem se o destinatário estiver offline
+                        if member not in self.pending_messages:
+                            self.pending_messages[member] = []
+                        self.pending_messages[member].append(f"05{src}{group_id}{timestamp}{data}")
+                        print(f"Mensagem armazenada para {member} no grupo {group_id}.")
+                except Exception as e:
+                    print(f"Erro ao enviar mensagem para {member} no grupo {group_id}: {e}")
 
 
 
