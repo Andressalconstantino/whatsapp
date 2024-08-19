@@ -86,18 +86,24 @@
         });
 
         document.getElementById('sendButton').addEventListener('click', function () {
-            if (selectedUserId && username) {
-                const msgInput = document.getElementById('msgInput');
-                const message = {
-                    type: 'chat',
-                    sender: username,
-                    recipient: selectedUserId,
-                    text: msgInput.value.trim()
-                };
-                socket.send(JSON.stringify(message));
-                msgInput.value = '';
-            }
-        });
+    if (selectedUserId && username) {
+        const msgInput = document.getElementById('msgInput');
+        const message = {
+            type: 'chat',
+            sender: username,
+            recipient: selectedUserId,
+            text: msgInput.value.trim()
+        };
+        socket.send(JSON.stringify(message));
+        
+        // Exibir a própria mensagem na área de mensagens
+        //const areaMensagem = document.getElementById('areaMensagem');
+        //areaMensagem.innerHTML += `<div><strong>Você:</strong> ${message.text}</div>`;
+        
+        msgInput.value = '';
+    }
+});
+
 
         window.onload = function() {
             document.getElementById('usernameModal').style.display = 'flex';

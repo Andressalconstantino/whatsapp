@@ -1,14 +1,19 @@
 import asyncio
 import websockets
 import json
+import threading
 
 class ChatServer:
     def __init__(self):
-        self.clients = {}  # clients {client_id: websocket}
+        self.clients = {}  # {client_id: websocket}
+        self.lock = threading.Lock()  # Para gerenciar o acesso a `self.clients` entre threads
 
     async def handle_connection(self, websocket, path):
         client_id = str(id(websocket))
-        self.clients[client_id] = websocket
+        
+        with self.lock:
+            self.clients[client_id] = websocket
+        
         await self.send_user_list()
 
         try:
@@ -17,19 +22,23 @@ class ChatServer:
         except websockets.ConnectionClosed:
             print(f"Conexão com {client_id} fechada.")
         finally:
-            del self.clients[client_id]
-            await self.send_user_list()  # Update user list when a client disconnects
+            with self.lock:
+                del self.clients[client_id]
+            await self.send_user_list()  # Atualiza a lista de usuários quando um cliente desconecta
 
     async def process_message(self, client_id, message):
         data = json.loads(message)
         if data['type'] == 'chat':
             recipient_id = data['recipient']
+            # Enviar a mensagem para o destinatário
             if recipient_id in self.clients:
                 await self.clients[recipient_id].send(message)
-            else:
-                print(f"Cliente {recipient_id} não encontrado.")
+            
+            # Enviar a mensagem de volta para o remetente
+            # Verifica se o remetente é diferente do destinatário para evitar duplicação
+            if recipient_id != client_id:
+                await self.clients[client_id].send(message)
         elif data['type'] == 'register':
-            # Handle user registration or other types of messages if necessary
             pass
 
     async def send_user_list(self):
@@ -42,10 +51,11 @@ class ChatServer:
             await websocket.send(message)
 
     def run(self):
-        start_server = websockets.serve(self.handle_connection, "localhost", 8765)
-        asyncio.get_event_loop().run_until_complete(start_server)
+        server = websockets.serve(self.handle_connection, "localhost", 8765)
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(server)
         print("Servidor WebSocket iniciado em ws://localhost:8765")
-        asyncio.get_event_loop().run_forever()
+        loop.run_forever()
 
 if __name__ == "__main__":
     server = ChatServer()
