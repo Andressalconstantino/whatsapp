@@ -38,6 +38,9 @@ class ChatClient:
                     dst = message[2:15]
                     timestamp = message[15:25]
                     print(f"Mensagens de {dst} lidas até {timestamp}.")
+                elif code == "12":  # Recebendo confirmação de criação de grupo
+                    group_id = message[2:]
+                    print(f"Grupo criado com sucesso! ID do grupo: {group_id}")
             except ConnectionResetError:
                 print("Conexão perdida com o servidor.")
                 break

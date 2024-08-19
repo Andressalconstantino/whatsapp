@@ -94,6 +94,10 @@ class ChatServer:
             for member in self.groups[group_id]:
                 if member in self.clients:
                     self.clients[member][0].sendall(group_notification.encode('utf-8'))
+            
+            # Retornar o ID do grupo para o criador
+            group_creation_confirmation = f"12{group_id}"
+            connection.sendall(group_creation_confirmation.encode('utf-8'))
 
     def send_message_to_group(self, src, group_id, timestamp, data):
         if group_id in self.groups:
