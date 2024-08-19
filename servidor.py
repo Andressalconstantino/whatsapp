@@ -13,26 +13,30 @@ class ChatServer:
         self.pending_messages = {}  # Mensagens pendentes {client_id: [(message_data)]}
         self.groups = {}  # Armazenar grupos {group_id: [client_id1, client_id2, ...]}
     
-    def generate_client_id(self):
-        return str(int(time.time() * 1000)).zfill(13)  # Gerar um ID único com 13 dígitos
-    
     def generate_group_id(self):
-        return f"G{int(time.time() * 1000)}"  # Gerar um ID único para o grupo
+        return f"G{str(int(time.time() * 1000)).zfill(12)}"  # Gerar um ID único para o grupo com prefixo 'G'
+
     
     def generate_client_id(self):
         return str(int(time.time() * 1000)).zfill(13)  # Gerar um ID único com 13 dígitos
     
     def handle_client(self, connection, address):
+        client_id = None
         try:
             while True:
                 data = connection.recv(1024).decode('utf-8')
                 if not data:
                     break
                 print(f"Recebido de {address}: {data}")
+                if client_id is None and data.startswith("03"):
+                    client_id = data[2:15]
                 self.process_message(connection, data)
         except ConnectionResetError:
             print(f"Conexão com {address} perdida.")
         finally:
+            if client_id and client_id in self.clients:
+                self.clients.pop(client_id, None)
+                self.pending_messages.pop(client_id, None)
             connection.close()
     
     def process_message(self, connection, message):
@@ -45,9 +49,13 @@ class ChatServer:
 
         elif code == "03":  # Conectar cliente
             client_id = message[2:15]
+            print(f"Tentando conectar o cliente {client_id}...")  # Adicionado
             if client_id in self.clients:
+                print(f"Cliente {client_id} encontrado.")  # Adicionado
                 self.clients[client_id] = (connection, None)
                 self.deliver_pending_messages(client_id)
+            else:
+                print(f"Cliente {client_id} não encontrado.")  # Adicionado
 
         elif code == "05":  # Enviar mensagem
             src = message[2:15]
@@ -55,9 +63,7 @@ class ChatServer:
             timestamp = message[28:38]
             data = message[38:].strip()
 
-            if dst.startswith("G"):  # Verificar se o destinatário é um grupo
-                self.send_message_to_group(src, dst, timestamp, data)
-            elif dst in self.clients and self.clients[dst][0]:  # Destinatário é um cliente conectado
+            if dst in self.clients and self.clients[dst][0]:  # Destinatário é um cliente conectado
                 self.clients[dst][0].sendall(message.encode('utf-8'))
                 # Confirmar entrega ao originador
                 confirmation = f"07{dst}{timestamp}"
@@ -68,24 +74,20 @@ class ChatServer:
                     self.pending_messages[dst] = []
                 self.pending_messages[dst].append(message)
 
-        elif code == "08":  # Confirmação de leitura
+        elif code == "08":  # Confirmação de leitura do cliente
             src = message[2:15]
-            timestamp = message[15:25]
-            if src in self.clients:
-                # Notificar o originador da mensagem sobre a leitura
-                for client_id, (conn, _) in self.clients.items():
-                    if client_id == src:
-                        continue
-                    # Verificar se há mensagens pendentes para este cliente
-                    for pending_message in self.pending_messages.get(client_id, []):
-                        if pending_message.startswith(f"05{src}"):
-                            confirmation = f"09{src}{timestamp}"
-                            conn.sendall(confirmation.encode('utf-8'))
+            dst = message[15:28]
+            timestamp = message[28:38]
+            # Enviar confirmação de leitura para o originador
+            confirmation = f"09{dst}{src}{timestamp}"
+            if src in self.clients and self.clients[src][0]:
+                self.clients[src][0].sendall(confirmation.encode('utf-8'))
+
 
         elif code == "10":  # Criar grupo
             creator = message[2:15]
             timestamp = message[15:25]
-            members = [message[i:i+13] for i in range(25, len(message), 13)]
+            members = [message[i:i+13] for i in range(25, len(message), 13)]  # Ler IDs dos membros
             group_id = self.generate_group_id()
             self.groups[group_id] = members + [creator]
 
@@ -99,33 +101,19 @@ class ChatServer:
             group_creation_confirmation = f"12{group_id}"
             connection.sendall(group_creation_confirmation.encode('utf-8'))
 
-    def send_message_to_group(self, src, group_id, timestamp, data):
-        if group_id in self.groups:
-            for member in self.groups[group_id]:
-                try:
-                    if member in self.clients and self.clients[member][0]:  # Membro conectado
-                        message = f"05{src}{group_id}{timestamp}{data.ljust(218)}"
-                        self.clients[member][0].sendall(message.encode('utf-8'))
-                        print(f"Mensagem enviada para {member} no grupo {group_id}.")
-                    else:
-                        # Armazenar mensagem se o destinatário estiver offline
-                        if member not in self.pending_messages:
-                            self.pending_messages[member] = []
-                        self.pending_messages[member].append(f"05{src}{group_id}{timestamp}{data}")
-                        print(f"Mensagem armazenada para {member} no grupo {group_id}.")
-                except Exception as e:
-                    print(f"Erro ao enviar mensagem para {member} no grupo {group_id}: {e}")
 
 
 
-
-
-    
     def deliver_pending_messages(self, client_id):
+        print(f"Tentando entregar mensagens pendentes para o cliente {client_id}...")  # Adicionado
         if client_id in self.pending_messages:
+            print(f"Mensagens pendentes encontradas para o cliente {client_id}.")  # Adicionado
             for message in self.pending_messages[client_id]:
                 self.clients[client_id][0].sendall(message.encode('utf-8'))
             del self.pending_messages[client_id]
+        else:
+            print(f"Nenhuma mensagem pendente encontrada para o cliente {client_id}.")  # Adicionado
+
     
     def run(self):
         while True:
