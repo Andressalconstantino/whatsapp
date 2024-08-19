@@ -36,12 +36,15 @@
         let socket;
         let username = '';
         let selectedUserId = '';
+        let messageHistories = {}; // {userId: {recipientId: [messages]}}
+        let isSocketOpen = false; // Track WebSocket connection state
 
         function connectWebSocket() {
             socket = new WebSocket('ws://localhost:8765');
 
             socket.onopen = function () {
                 console.log('Conectado ao servidor WebSocket');
+                isSocketOpen = true; // Set the flag to true when the connection is open
             };
 
             socket.onmessage = function (event) {
@@ -50,13 +53,25 @@
                 if (message.type === 'user_list') {
                     updateUserList(message.users);
                 } else if (message.type === 'chat') {
+                    if (message.sender === selectedUserId || message.recipient === selectedUserId) {
+                        addMessageToHistory(message);
+                        if (message.recipient === selectedUserId) {
+                            displayMessage(message);
+                        }
+                    }
+                } else if (message.type === 'history') {
                     const areaMensagem = document.getElementById('areaMensagem');
-                    areaMensagem.innerHTML += `<div><strong>${message.sender}:</strong> ${message.text}</div>`;
+                    areaMensagem.innerHTML = '';  // Clear existing messages
+                    message.history.forEach(msg => {
+                        const msgData = JSON.parse(msg);
+                        displayMessage(msgData);
+                    });
                 }
             };
 
             socket.onclose = function () {
                 console.log('Desconectado do servidor WebSocket');
+                isSocketOpen = false; // Reset the flag when the connection is closed
             };
         }
 
@@ -64,16 +79,49 @@
             const chatOptions = document.getElementById('chatOptions');
             chatOptions.innerHTML = '';  // Clear existing users
 
-            users.forEach(userId => {
+            Object.entries(users).forEach(([userId, name]) => {
                 const button = document.createElement('button');
                 button.className = 'userOption';
-                button.innerText = userId;
+                button.innerText = name; // Set the button text to the username
                 button.addEventListener('click', function () {
-                    selectedUserId = userId;
-                    document.getElementById('chatUsername').innerText = selectedUserId;
+                    selectUser(userId);
                 });
                 chatOptions.appendChild(button);
             });
+        }
+
+        function selectUser(userId) {
+            selectedUserId = userId;
+            document.getElementById('chatUsername').innerText = username;
+            if (!messageHistories[selectedUserId]) {
+                messageHistories[selectedUserId] = {};
+            }
+            requestHistory(selectedUserId);
+        }
+
+        function requestHistory(userId) {
+            if (username && isSocketOpen) {
+                const request = {
+                    type: 'request_history',
+                    recipient: userId
+                };
+                socket.send(JSON.stringify(request));
+            }
+        }
+
+        function addMessageToHistory(message) {
+            if (!messageHistories[message.sender]) {
+                messageHistories[message.sender] = {};
+            }
+            if (!messageHistories[message.sender][message.recipient]) {
+                messageHistories[message.sender][message.recipient] = [];
+            }
+            messageHistories[message.sender][message.recipient].push(JSON.stringify(message));
+        }
+
+        function displayMessage(message) {
+            const areaMensagem = document.getElementById('areaMensagem');
+            areaMensagem.innerHTML += `<div><strong>${message.sender}:</strong> ${message.text}</div>`;
         }
 
         document.getElementById('setUsernameButton').addEventListener('click', function () {
@@ -82,28 +130,36 @@
             if (username) {
                 document.getElementById('usernameModal').style.display = 'none';
                 connectWebSocket();
+                const registrationMessage = {
+                    type: 'register',
+                    username: username
+                };
+                if (isSocketOpen) {
+                    socket.send(JSON.stringify(registrationMessage));
+                } else {
+                    socket.onopen = function () {
+                        isSocketOpen = true; // Ensure WebSocket is open before sending the registration message
+                        socket.send(JSON.stringify(registrationMessage));
+                    };
+                }
             }
         });
 
         document.getElementById('sendButton').addEventListener('click', function () {
-    if (selectedUserId && username) {
-        const msgInput = document.getElementById('msgInput');
-        const message = {
-            type: 'chat',
-            sender: username,
-            recipient: selectedUserId,
-            text: msgInput.value.trim()
-        };
-        socket.send(JSON.stringify(message));
-        
-        // Exibir a própria mensagem na área de mensagens
-        //const areaMensagem = document.getElementById('areaMensagem');
-        //areaMensagem.innerHTML += `<div><strong>Você:</strong> ${message.text}</div>`;
-        
-        msgInput.value = '';
-    }
-});
-
+            if (selectedUserId && username && isSocketOpen) {
+                const msgInput = document.getElementById('msgInput');
+                const message = {
+                    type: 'chat',
+                    sender: username,
+                    recipient: selectedUserId,
+                    text: msgInput.value.trim()
+                };
+                socket.send(JSON.stringify(message));
+                msgInput.value = '';
+                addMessageToHistory(message);  // Add message to history for display
+                displayMessage(message);  // Immediately display message sent by the user
+            }
+        });
 
         window.onload = function() {
             document.getElementById('usernameModal').style.display = 'flex';
