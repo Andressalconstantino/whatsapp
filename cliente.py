@@ -81,8 +81,7 @@ class ClienteChat:
         mensagem = f"08{remetente}{self.cliente_id}{horario}"
         self.cliente_socket.sendall(mensagem.encode('utf-8'))
 
-    def obterMembros(self, grupoId):
-        """Retorna a lista de IDs dos membros de um grupo."""
+    def obterMembros(self, grupoId):#obtem ids dos integrantes do grupo
         return self.grupos.get(grupoId, [])
     
     def enviarMensagens(self, destinatario, dados):
