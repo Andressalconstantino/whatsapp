@@ -4,140 +4,140 @@ import time
 import csv
 import os
 
-class ChatServer:
+class ServidorChat:
     def __init__(self, host='localhost', port=12345):
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server_socket.bind((host, port))
         self.server_socket.listen(5)
         print(f"Servidor iniciado em {host}:{port}")
         
-        self.clients = {}  # Armazenar clientes {client_id: (connection, address)}
-        self.pending_messages = {}  # Mensagens pendentes {client_id: [(message_data)]}
-        self.groups = {}  # Armazenar grupos {group_id: [client_id1, client_id2, ...]}
+        self.clientes = {}  #armazenar clientes
+        self.mensagensPendentes = {}  #mensagens pendentes
+        self.grupos = {}  #armazenar grupos
     
-    def generate_group_id(self):
-        return f"G{str(int(time.time() * 1000)).zfill(12)}"  # Gerar um ID único para o grupo com prefixo 'G'
+    def gera_grupoId(self):
+        return f"G{str(int(time.time() * 1000)).zfill(12)}"  #gerar um ID para o grupo
 
-    def generate_client_id(self):
-        return str(int(time.time() * 1000)).zfill(13)  # Gerar um ID único com 13 dígitos
+    def gera_cliente_id(self):
+        return str(int(time.time() * 1000)).zfill(13)  #gerar um ID para o usuário
     
-    def handle_client(self, connection, address):
-        client_id = None
+    def gerenciaCliente(self, conexao, endereco):
+        cliente_id = None
         try:
             while True:
-                data = connection.recv(1024).decode('utf-8')
-                if not data:
+                dados = conexao.recv(1024).decode('utf-8')
+                if not dados:
                     break
-                print(f"Recebido de {address}: {data}")
-                if client_id is None and data.startswith("03"):
-                    client_id = data[2:15]
-                    self.load_chat_history(client_id)
-                self.process_message(connection, data)
+                print(f"Recebido de {endereco}: {dados}")
+                if cliente_id is None and dados.startswith("03"):
+                    cliente_id = dados[2:15]
+                    self.carregaHistoricoChat(cliente_id)
+                self.processa_mensagem(conexao, dados)
         except ConnectionResetError:
-            print(f"Conexão com {address} perdida.")
+            print(f"Conexão com {endereco} perdida.")
         finally:
-            if client_id and client_id in self.clients:
-                self.clients.pop(client_id, None)
-                self.pending_messages.pop(client_id, None)
-            connection.close()
+            if cliente_id and cliente_id in self.clientes:
+                self.clientes.pop(cliente_id, None)
+                self.mensagensPendentes.pop(cliente_id, None)
+            conexao.close()
     
-    def process_message(self, connection, message):
-        code = message[:2]
-        if code == "01":  # Registrar cliente
-            client_id = self.generate_client_id()
-            self.clients[client_id] = (connection, None)
-            response = f"02{client_id}"
-            connection.sendall(response.encode('utf-8'))
+    def processa_mensagem(self, conexao, mensagem):
+        codigo = mensagem[:2]
+        if codigo == "01":  #registrar cliente
+            cliente_id = self.gera_cliente_id()
+            self.clientes[cliente_id] = (conexao, None)
+            resposta = f"02{cliente_id}"
+            conexao.sendall(resposta.encode('utf-8'))
 
-        elif code == "03":  # Conectar cliente
-            client_id = message[2:15]
-            print(f"Tentando conectar o cliente {client_id}...")
-            if client_id in self.clients:
-                self.clients[client_id] = (connection, None)
-                self.deliver_pending_messages(client_id)
+        elif codigo == "03":  #conectar cliente
+            cliente_id = mensagem[2:15]
+            print(f"Tentando conectar o cliente {cliente_id}...")
+            if cliente_id in self.clientes:
+                self.clientes[cliente_id] = (conexao, None)
+                self.envia_mensagensPendentes(cliente_id)
             else:
-                print(f"Cliente {client_id} não encontrado.")
+                print(f"Cliente {cliente_id} não encontrado.")
 
-        elif code == "05":  # Enviar mensagem
-            src = message[2:15]
-            dst = message[15:28]
-            timestamp = message[28:38]
-            data = message[38:].strip()
+        elif codigo == "05":  #enviar mensagem
+            remetente = mensagem[2:15]
+            destinatario = mensagem[15:28]
+            horario = mensagem[28:38]
+            dados = mensagem[38:].strip()
 
-            if dst in self.clients and self.clients[dst][0]:  # Destinatário é um cliente conectado
-                self.clients[dst][0].sendall(message.encode('utf-8'))
-                # Confirmar entrega ao originador
-                confirmation = f"07{dst}{timestamp}"
-                self.clients[src][0].sendall(confirmation.encode('utf-8'))
-                # Salvar mensagem no histórico
-                self.save_message(src, dst, data)
+            if destinatario in self.clientes and self.clientes[destinatario][0]:  # Destinatário é um cliente conectado
+                self.clientes[destinatario][0].sendall(mensagem.encode('utf-8'))
+                #confirmar entrega ao remetente
+                confirmacao = f"07{destinatario}{horario}"
+                self.clientes[remetente][0].sendall(confirmacao.encode('utf-8'))
+                #salvar mensagem no histórico
+                self.save_mensagem(remetente, destinatario, dados)
             else:
-                # Armazenar mensagem se o destinatário estiver offline
-                if dst not in self.pending_messages:
-                    self.pending_messages[dst] = []
-                self.pending_messages[dst].append(message)
+                #armazenar mensagem se o destinatário estiver offline
+                if destinatario not in self.mensagensPendentes:
+                    self.mensagensPendentes[destinatario] = []
+                self.mensagensPendentes[destinatario].append(mensagem)
 
-        elif code == "08":  # Confirmação de leitura do cliente
-            src = message[2:15]
-            dst = message[15:28]
-            timestamp = message[28:38]
-            # Enviar confirmação de leitura para o originador
-            confirmation = f"09{dst}{src}{timestamp}"
-            if src in self.clients and self.clients[src][0]:
-                self.clients[src][0].sendall(confirmation.encode('utf-8'))
+        elif codigo == "08":  #confirmação de leitura do cliente
+            remetente = mensagem[2:15]
+            destinatario = mensagem[15:28]
+            horario = mensagem[28:38]
+            #enviar confirmação de leitura para o remetente
+            confirmacao = f"09{destinatario}{remetente}{horario}"
+            if remetente in self.clientes and self.clientes[remetente][0]:
+                self.clientes[remetente][0].sendall(confirmacao.encode('utf-8'))
 
-        elif code == "10":  # Criar grupo
-            creator = message[2:15]
-            timestamp = message[15:25]
-            members = [message[i:i+13].strip() for i in range(25, len(message), 13)]
-            group_id = self.generate_group_id()
-            self.groups[group_id] = list(set(members + [creator]))  # Adiciona o criador ao grupo e remove duplicatas
+        elif codigo == "10":  #criar grupo
+            criador = mensagem[2:15]
+            horario = mensagem[15:25]
+            membros = [mensagem[i:i+13].strip() for i in range(25, len(mensagem), 13)]
+            grupoId = self.gera_grupoId()
+            self.grupos[grupoId] = list(set(membros + [criador]))  #adiciona o criador ao grupo e remove duplicatas
 
-            # Notificar membros do grupo
-            group_notification = f"11{group_id}{timestamp}{''.join(self.groups[group_id])}"
-            for member in self.groups[group_id]:
-                if member in self.clients:
-                    self.clients[member][0].sendall(group_notification.encode('utf-8'))
+            #notificar membros do grupo
+            notificaGrupo = f"11{grupoId}{horario}{''.join(self.grupos[grupoId])}"
+            for membro in self.grupos[grupoId]:
+                if membro in self.clientes:
+                    self.clientes[membro][0].sendall(notificaGrupo.encode('utf-8'))
 
-            # Retornar o ID do grupo para o criador
-            group_creation_confirmation = f"12{group_id}"
-            connection.sendall(group_creation_confirmation.encode('utf-8'))
+            #retornar o ID do grupo para o criador
+            grupo_criado_confirmacao = f"12{grupoId}"
+            conexao.sendall(grupo_criado_confirmacao.encode('utf-8'))
 
-    def deliver_pending_messages(self, client_id):
-        print(f"Tentando entregar mensagens pendentes para o cliente {client_id}...")
-        if client_id in self.pending_messages:
-            print(f"Mensagens pendentes encontradas para o cliente {client_id}.")
-            for message in self.pending_messages[client_id]:
-                self.clients[client_id][0].sendall(message.encode('utf-8'))
-            del self.pending_messages[client_id]
+    def envia_mensagensPendentes(self, cliente_id):
+        print(f"Tentando entregar mensagens pendentes para o cliente {cliente_id}...")
+        if cliente_id in self.mensagensPendentes:
+            print(f"Mensagens pendentes encontradas para o cliente {cliente_id}.")
+            for mensagem in self.mensagensPendentes[cliente_id]:
+                self.clientes[cliente_id][0].sendall(mensagem.encode('utf-8'))
+            del self.mensagensPendentes[cliente_id]
         else:
-            print(f"Nenhuma mensagem pendente encontrada para o cliente {client_id}.")
+            print(f"Nenhuma mensagem pendente encontrada para o cliente {cliente_id}.")
     
-    def save_message(self, src, dst, data):
-        timestamp = str(int(time.time()))
-        file_path = f"chat_history/{src}_{dst}.csv"
-        os.makedirs(os.path.dirname(file_path), exist_ok=True)
-        with open(file_path, 'a', newline='') as file:
+    def save_mensagem(self, remetente, destinatario, dados):
+        horario = str(int(time.time()))
+        caminhoArq = f"chat_history/{remetente}_{destinatario}.csv"
+        os.makedirs(os.path.dirname(caminhoArq), exist_ok=True)
+        with open(caminhoArq, 'a', newline='') as file:
             writer = csv.writer(file)
-            writer.writerow([timestamp, src, dst, data])
+            writer.writerow([horario, remetente, destinatario, dados])
     
-    def load_chat_history(self, client_id):
-        print(f"Carregando histórico de chat para o cliente {client_id}...")
+    def carregaHistoricoChat(self, cliente_id):
+        print(f"Carregando histórico de chat para o cliente {cliente_id}...")
         for file in os.listdir('chat_history'):
-            if file.startswith(client_id):
+            if file.startswith(cliente_id):
                 with open(os.path.join('chat_history', file), 'r') as file:
                     reader = csv.reader(file)
                     for row in reader:
-                        if len(row) == 4:  # Verificar se a linha tem o número correto de campos
-                            timestamp, src, dst, data = row
-                            print(f"Mensagem de {src} para {dst} ({timestamp}): {data}")
+                        if len(row) == 4:  #verificar se a linha tem o número correto de campos
+                            horario, remetente, destinatario, dados = row
+                            print(f"Mensagem de {remetente} para {destinatario} ({horario}): {dados}")
     
     def run(self):
         while True:
-            connection, address = self.server_socket.accept()
-            print(f"Conexão aceita de {address}")
-            threading.Thread(target=self.handle_client, args=(connection, address)).start()
+            conexao, endereco = self.server_socket.accept()
+            print(f"Conexão aceita de {endereco}")
+            threading.Thread(target=self.gerenciaCliente, args=(conexao, endereco)).start()
 
 if __name__ == "__main__":
-    server = ChatServer()
-    server.run()
+    servidor = ServidorChat()
+    servidor.run()
