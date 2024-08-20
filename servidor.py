@@ -51,13 +51,12 @@ class ChatServer:
 
         elif code == "03":  # Conectar cliente
             client_id = message[2:15]
-            print(f"Tentando conectar o cliente {client_id}...")  # Adicionado
+            print(f"Tentando conectar o cliente {client_id}...")
             if client_id in self.clients:
-                print(f"Cliente {client_id} encontrado.")  # Adicionado
                 self.clients[client_id] = (connection, None)
                 self.deliver_pending_messages(client_id)
             else:
-                print(f"Cliente {client_id} não encontrado.")  # Adicionado
+                print(f"Cliente {client_id} não encontrado.")
 
         elif code == "05":  # Enviar mensagem
             src = message[2:15]
@@ -90,36 +89,37 @@ class ChatServer:
         elif code == "10":  # Criar grupo
             creator = message[2:15]
             timestamp = message[15:25]
-            members = [message[i:i+13] for i in range(25, len(message), 13)]  # Ler IDs dos membros
+            members = [message[i:i+13].strip() for i in range(25, len(message), 13)]
             group_id = self.generate_group_id()
-            self.groups[group_id] = members + [creator]
+            self.groups[group_id] = list(set(members + [creator]))  # Adiciona o criador ao grupo e remove duplicatas
 
             # Notificar membros do grupo
             group_notification = f"11{group_id}{timestamp}{''.join(self.groups[group_id])}"
             for member in self.groups[group_id]:
                 if member in self.clients:
                     self.clients[member][0].sendall(group_notification.encode('utf-8'))
-            
+
             # Retornar o ID do grupo para o criador
             group_creation_confirmation = f"12{group_id}"
             connection.sendall(group_creation_confirmation.encode('utf-8'))
 
     def deliver_pending_messages(self, client_id):
-        print(f"Tentando entregar mensagens pendentes para o cliente {client_id}...")  # Adicionado
+        print(f"Tentando entregar mensagens pendentes para o cliente {client_id}...")
         if client_id in self.pending_messages:
-            print(f"Mensagens pendentes encontradas para o cliente {client_id}.")  # Adicionado
+            print(f"Mensagens pendentes encontradas para o cliente {client_id}.")
             for message in self.pending_messages[client_id]:
                 self.clients[client_id][0].sendall(message.encode('utf-8'))
             del self.pending_messages[client_id]
         else:
-            print(f"Nenhuma mensagem pendente encontrada para o cliente {client_id}.")  # Adicionado
-
+            print(f"Nenhuma mensagem pendente encontrada para o cliente {client_id}.")
+    
     def save_message(self, src, dst, data):
+        timestamp = str(int(time.time()))
         file_path = f"chat_history/{src}_{dst}.csv"
         os.makedirs(os.path.dirname(file_path), exist_ok=True)
         with open(file_path, 'a', newline='') as file:
             writer = csv.writer(file)
-            writer.writerow([src, dst, data])
+            writer.writerow([timestamp, src, dst, data])
     
     def load_chat_history(self, client_id):
         print(f"Carregando histórico de chat para o cliente {client_id}...")

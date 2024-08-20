@@ -45,51 +45,60 @@ class ChatClient:
     
     def listen_for_messages(self):
         while True:
-                try:
-                    message = self.client_socket.recv(1024).decode('utf-8')
-                    if not message:
-                        break
-                    code = message[:2]
-                    if code == "05":  # Recebendo uma mensagem
-                        src = message[2:15]
-                        dst = message[15:28]
-                        data = message[38:].strip()
-                        print(f"Mensagem de {src} para {dst}: {data}")
-                        # Enviar confirmação de leitura
-                        self.send_read_confirmation(src, message[28:38])
-                    elif code == "07":  # Confirmação de entrega
-                        dst = message[2:15]
-                        timestamp = message[15:25]
-                        print(f"Mensagens entregues para {dst} até {timestamp}.")
-                    elif code == "09":  # Confirmação de leitura
-                        src = message[2:15]
-                        dst = message[15:28]
-                        timestamp = message[28:38]
-                        print(f"Mensagens enviadas para {dst} lidas por {src} até {timestamp}.")
-                    elif code == "11":  # Grupo criado
-                        group_id = message[2:16]
-                        timestamp = message[16:26]
-                        members = [message[i:i+13] for i in range(26, len(message), 13)]
-                        self.groups[group_id] = members
-                        print(f"Grupo criado: ID {group_id}, membros: {members}")
-                        # Salvar estado após a criação do grupo
-                        self.save_state()
-                except ConnectionResetError:
-                    print("Conexão perdida com o servidor.")
+            try:
+                message = self.client_socket.recv(1024).decode('utf-8')
+                if not message:
                     break
+                code = message[:2]
+                if code == "05":  # Recebendo uma mensagem
+                    src = message[2:15]
+                    dst = message[15:28]
+                    data = message[38:].strip()
+                    print(f"Mensagem de {src} para {dst}: {data}")
+                    # Enviar confirmação de leitura
+                    self.send_read_confirmation(src, message[28:38])
+                elif code == "07":  # Confirmação de entrega
+                    dst = message[2:15]
+                    timestamp = message[15:25]
+                    print(f"Mensagens entregues para {dst} até {timestamp}.")
+                elif code == "09":  # Confirmação de leitura
+                    src = message[2:15]
+                    dst = message[15:28]
+                    timestamp = message[28:38]
+                    print(f"Mensagens enviadas para {dst} lidas por {src} até {timestamp}.")
+                elif code == "11":  # Grupo criado
+                    group_id = message[2:16]
+                    timestamp = message[16:26]
+                    members = [message[i:i+13].strip() for i in range(26, len(message), 13)]
+                    self.groups[group_id] = members
+                    print(f"Grupo criado: ID {group_id}, membros: {members}")
+                    # Salvar estado após a criação do grupo
+                    self.save_state()
+            except ConnectionResetError:
+                print("Conexão perdida com o servidor.")
+                break
     
     def send_read_confirmation(self, src, timestamp):
         message = f"08{src}{self.client_id}{timestamp}"
         self.client_socket.sendall(message.encode('utf-8'))
 
+    def get_members(self, group_id):
+        """Retorna a lista de IDs dos membros de um grupo."""
+        return self.groups.get(group_id, [])
     
     def send_message(self, dst, data):
         timestamp = str(int(time.time()))
+        data = data.ljust(218)
         if dst.startswith("G"):
-            message = f"05{self.client_id}{dst}{timestamp}{data.ljust(218)}"
+            # Mensagem para o grupo
+            members = self.get_members(dst)
+            for member in members:
+                message = f"05{self.client_id}{member}{timestamp}{data}"
+                self.client_socket.sendall(message.encode('utf-8'))
         else:
-            message = f"05{self.client_id}{dst}{timestamp}{data.ljust(218)}"
-        self.client_socket.sendall(message.encode('utf-8'))
+            # Mensagem direta
+            message = f"05{self.client_id}{dst}{timestamp}{data}"
+            self.client_socket.sendall(message.encode('utf-8'))
     
     def create_group(self, members):
         timestamp = str(int(time.time()))
@@ -103,7 +112,7 @@ class ChatClient:
         
         while True:
             try:
-                command = input("Digite 'msg <destinatário> <mensagem>' para enviar uma mensagem, 'group <membros>' para criar um grupo, ou 'exit' para sair: ").strip()
+                command = input("Digite 'msg <destinatário> <mensagem>' para enviar uma mensagem, 'group <membros>' para criar um grupo, ou 'exit' para sair: \n").strip()
                 
                 if command.startswith("msg "):
                     parts = command.split(maxsplit=2)
@@ -120,11 +129,9 @@ class ChatClient:
                     else:
                         print("Formato inválido. Use: group <membro1> <membro2> ...")
 
-                
                 elif command == "exit":
                     print("Saindo...")
                     self.client_socket.close()  # Fechar o socket
-                    self.running = False
                     break
                 
                 else:
@@ -132,8 +139,6 @@ class ChatClient:
             
             except Exception as e:
                 print(f"Erro ao processar comando: {e}")
-
-
 
 if __name__ == "__main__":
     client = ChatClient()
