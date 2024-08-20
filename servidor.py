@@ -11,7 +11,8 @@ class ServidorChat:
         self.server_socket.listen(5)
         print(f"Servidor iniciado em {host}:{port}")
         
-        self.clientes = {}  #armazenar clientes
+        self.clientes = {}  #armazenar clientes conectados
+        self.clientesTodos = {} #armazena clientes desconectados também
         self.mensagensPendentes = {}  #mensagens pendentes
         self.grupos = {}  #armazenar grupos
     
@@ -46,13 +47,14 @@ class ServidorChat:
         if codigo == "01":  #registrar cliente
             cliente_id = self.gera_cliente_id()
             self.clientes[cliente_id] = (conexao, None)
+            self.clientesTodos[cliente_id] = (conexao, None)
             resposta = f"02{cliente_id}"
             conexao.sendall(resposta.encode('utf-8'))
 
         elif codigo == "03":  #conectar cliente
             cliente_id = mensagem[2:15]
             print(f"Tentando conectar o cliente {cliente_id}...")
-            if cliente_id in self.clientes:
+            if cliente_id in self.clientesTodos:
                 self.clientes[cliente_id] = (conexao, None)
                 self.envia_mensagensPendentes(cliente_id)
             else:
@@ -70,7 +72,7 @@ class ServidorChat:
                 confirmacao = f"07{destinatario}{horario}"
                 self.clientes[remetente][0].sendall(confirmacao.encode('utf-8'))
                 #salvar mensagem no histórico
-                self.save_mensagem(remetente, destinatario, dados)
+                self.salva_mensagem(remetente, destinatario, dados)
             else:
                 #armazenar mensagem se o destinatário estiver offline
                 if destinatario not in self.mensagensPendentes:
@@ -91,7 +93,7 @@ class ServidorChat:
             horario = mensagem[15:25]
             membros = [mensagem[i:i+13].strip() for i in range(25, len(mensagem), 13)]
             grupoId = self.gera_grupoId()
-            self.grupos[grupoId] = list(set(membros + [criador]))  #adiciona o criador ao grupo e remove duplicatas
+            self.grupos[grupoId] = list(set(membros + [criador]))  #adiciona o criador ao grupo e remove duplicados
 
             #notificar membros do grupo
             notificaGrupo = f"11{grupoId}{horario}{''.join(self.grupos[grupoId])}"
@@ -113,7 +115,7 @@ class ServidorChat:
         else:
             print(f"Nenhuma mensagem pendente encontrada para o cliente {cliente_id}.")
     
-    def save_mensagem(self, remetente, destinatario, dados):
+    def salva_mensagem(self, remetente, destinatario, dados):
         horario = str(int(time.time()))
         caminhoArq = f"chat_history/{remetente}_{destinatario}.csv"
         os.makedirs(os.path.dirname(caminhoArq), exist_ok=True)

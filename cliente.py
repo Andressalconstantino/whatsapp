@@ -5,27 +5,27 @@ import pickle
 
 class ClienteChat:
     def __init__(self, host='localhost', port=12345):
-        self.cliente_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.cliente_socket.connect((host, port))
+        self.cliente_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM) #cria socket do cliente
+        self.cliente_socket.connect((host, port)) #conecta com o servidor
         self.cliente_id = None
         self.carregaEstadoCliente()
     
     def salvaEstadoCliente(self):
-        state = {
+        estado = {
             'cliente_id': self.cliente_id,
             'contatos': self.contatos,
             'grupos': self.grupos
         }
-        with open('cliente_state.pkl', 'wb') as f:
-            pickle.dump(state, f)
+        with open('cliente_estado.pkl', 'wb') as f:
+            pickle.dump(estado, f)
     
     def carregaEstadoCliente(self):
         try:
-            with open('cliente_state.pkl', 'rb') as f:
-                state = pickle.load(f)
-                self.cliente_id = state.get('cliente_id')
-                self.contatos = state.get('contatos', {})
-                self.grupos = state.get('grupos', {})
+            with open('cliente_estado.pkl', 'rb') as f:
+                estado = pickle.load(f)
+                self.cliente_id = estado.get('cliente_id')
+                self.contatos = estado.get('contatos', {})
+                self.grupos = estado.get('grupos', {})
         except FileNotFoundError:
             self.contatos = {}
             self.grupos = {}
@@ -129,7 +129,7 @@ class ClienteChat:
 
                 elif comando == "exit":
                     print("Saindo...")
-                    self.cliente_socket.close()  # Fechar o socket
+                    self.cliente_socket.close()  #fechar o socket
                     break
                 
                 else:
