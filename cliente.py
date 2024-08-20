@@ -123,6 +123,8 @@ class ChatClient:
                 
                 elif command == "exit":
                     print("Saindo...")
+                    self.client_socket.close()  # Fechar o socket
+                    self.running = False
                     break
                 
                 else:
